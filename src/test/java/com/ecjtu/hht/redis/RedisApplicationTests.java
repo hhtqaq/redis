@@ -17,6 +17,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 /**
  * redis 相关操作 单元测试
@@ -102,4 +103,30 @@ public class RedisApplicationTests {
         String s = new BufferedReader(new InputStreamReader(System.in)).readLine();
     }
 
+
+    @Test
+    public void testDistributedLock() {
+        //businessCode();
+        // 模拟多个线程
+        for (int i = 0; i < 10; i++) {
+            new Thread(() -> businessCode()).start();
+        }
+    }
+
+    public void businessCode() {
+        String key = "redisDistribute";
+        Boolean isGetLock = redisUtils.setNX(key, 30, TimeUnit.MINUTES);
+        if (!isGetLock) {
+            System.out.println("其他实例正在运行————————" + Thread.currentThread().getName());
+            return;
+        }
+        //执行逻辑  假设执行时间为5秒
+        try {
+            System.out.println("执行业务逻辑代码——————————" + Thread.currentThread().getName());
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println(redisUtils.releaseLock(key));
+    }
 }

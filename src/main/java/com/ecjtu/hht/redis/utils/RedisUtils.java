@@ -1,13 +1,19 @@
 package com.ecjtu.hht.redis.utils;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisStringCommands;
+import org.springframework.data.redis.connection.ReturnType;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.types.Expiration;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -17,7 +23,15 @@ import java.util.concurrent.TimeUnit;
  * @date 2018-11-28 10:35
  **/
 @Component
+@Slf4j
 public class RedisUtils {
+
+    //定义获取锁的lua脚本
+    private final static String LOCK_LUA_SCRIPT = "if redis.call(\"setnx\", KEYS[1], ARGV[1]) == 1 then return redis.call(\"pexpire\", KEYS[1], ARGV[2]) else return 0 end";
+    //定义释放锁的lua脚本
+    private final static String UNLOCK_LUA_SCRIPT = "if redis.call(\"get\",KEYS[1]) == ARGV[1] then return redis.call(\"del\",KEYS[1]) else return 0 end";
+    private static final Long LOCK_SUCCESS = 1L;
+
     /**
      * 注入redisTemplate bean
      */
@@ -579,4 +593,34 @@ public class RedisUtils {
         redisTemplate.convertAndSend(topic, content);
     }
 
+    //加锁
+    public Boolean setNX(final String key, final String value, final long expirationTime, final TimeUnit timeUnit) {
+        DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>(LOCK_LUA_SCRIPT, Long.class);
+        Long execute = redisTemplate.execute(redisScript, Collections.singletonList(key), value == null ? "" : value, timeUnit.toMillis(expirationTime));
+        return execute.equals(LOCK_SUCCESS);
+    }
+
+    //加锁
+    public Boolean setNX(final String key, final long expirationTime, final TimeUnit timeUnit) {
+        try {
+            //加锁失败会抛出异常
+            setNX(key, null, expirationTime, timeUnit);
+        } catch (Exception ex) {
+            log.error(Thread.currentThread().getName()+"______________"+ex.getMessage());
+            return false;
+        }
+        return true;
+    }
+
+    //释放锁
+    public Boolean releaseLock(String key, String value) {
+        DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>(UNLOCK_LUA_SCRIPT, Long.class);
+        Long execute = redisTemplate.execute(redisScript, Collections.singletonList(key), value == null ? "" : value);
+        return execute.equals(LOCK_SUCCESS);
+    }
+
+    //释放锁
+    public Boolean releaseLock(String key) {
+        return releaseLock(key, null);
+    }
 }
