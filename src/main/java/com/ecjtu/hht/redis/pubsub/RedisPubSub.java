@@ -13,6 +13,7 @@ import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
@@ -58,10 +59,9 @@ public class RedisPubSub {
      * @return
      */
     @Bean
-    public MessageListenerAdapter listener(Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer,
-                                           MessageSubscriber subscriber) {
+    public MessageListenerAdapter listener(MessageSubscriber subscriber) {
         MessageListenerAdapter adapter = new MessageListenerAdapter(subscriber, "onMessage");
-        adapter.setSerializer(jackson2JsonRedisSerializer);
+        adapter.setSerializer(new JdkSerializationRedisSerializer());
         adapter.afterPropertiesSet();
         return adapter;
     }

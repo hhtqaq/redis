@@ -16,7 +16,10 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @ToString
 @NoArgsConstructor
-public class Order {
+public class Order implements Serializable {
+
+
+    private static final long serialVersionUID = 5180856340569778523L;
 
     private String id;
 

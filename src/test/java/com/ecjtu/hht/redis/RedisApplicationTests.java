@@ -4,12 +4,15 @@ import com.ecjtu.hht.redis.config.RedisConfig;
 import com.ecjtu.hht.redis.model.Order;
 import com.ecjtu.hht.redis.model.User;
 import com.ecjtu.hht.redis.pubsub.RedisPubSub;
+import com.ecjtu.hht.redis.utils.LockUtil;
 import com.ecjtu.hht.redis.utils.RedisUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.redisson.api.RLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.test.context.junit4.SpringRunner;
 
@@ -17,6 +20,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -24,12 +29,18 @@ import java.util.concurrent.TimeUnit;
  */
 @RunWith(SpringRunner.class)
 @SpringBootTest
-@EnableScheduling
 public class RedisApplicationTests {
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    private RedisTemplate<String, String> stringRedisTemplate;
 
     @Autowired
     private RedisUtils redisUtils;
 
+    @Autowired
+    private LockUtil lockUtil;
 
     @Autowired
     private RedisPubSub redisPubSub;
@@ -88,8 +99,16 @@ public class RedisApplicationTests {
      */
     @Test
     public void testRedisGetComplexObject() {
-        Order order = (Order) redisUtils.get("complexOrder");
-        System.out.println("测试redis get 复杂对象：" + order);
+        while (true) {
+            Order order = null;
+            try {
+                order = (Order) redisUtils.get("complexOrder");
+            } catch (Exception e) {
+                System.out.println("redis连接不上了——————————————————");
+            }
+            System.out.println("测试redis get 复杂对象：" + order);
+        }
+
     }
     //------------------------------------------- 2 高级操作
 
@@ -105,28 +124,81 @@ public class RedisApplicationTests {
 
 
     @Test
-    public void testDistributedLock() {
+    public void testDistributedLock() throws InterruptedException {
         //businessCode();
         // 模拟多个线程
-        for (int i = 0; i < 10; i++) {
-            new Thread(() -> businessCode()).start();
-        }
+        new Thread(() -> businessCode()).start();
+        Thread.sleep(1);
+        new Thread(() -> businessCode()).start();
+
+    }
+
+    /**
+     * test hset
+     */
+    @Test
+    public void testHset() {
+        Object generalAlarm = stringRedisTemplate.opsForHash().get("GeneralAlarm", "DpikeyNotice:ms-resource-manager:1");
+        System.out.println(generalAlarm);
+    }
+
+    /**
+     * test hgetAll
+     */
+    @Test
+    public void testHgetAll() {
+        Map<Object, Object> hmget = redisUtils.hmget("upgrade:task");
+        System.out.println(hmget);
+    }
+
+    /**
+     * test hgetAll
+     */
+    @Test
+    public void testHmKeys() {
+        Set<Object> keys = redisTemplate.opsForHash().keys("GeneralAlarm");
+        System.out.println(keys);
+    }
+
+    /**
+     * test hmExists
+     */
+    @Test
+    public void testHmExists() {
+        System.out.println(TimeUnit.SECONDS);
+   /*     Boolean aBoolean = redisTemplate.opsForHash().hasKey("", "");
+        System.out.println(aBoolean);*/
+    }
+
+    /**
+     * test lPush
+     */
+    @Test
+    public void testlPush() {
+        Long aLong = redisTemplate.opsForList().leftPush("", "");
+    }
+
+    /**
+     * test lPush
+     */
+    @Test
+    public void testrename() {
+        redisTemplate.rename("", "");
     }
 
     public void businessCode() {
         String key = "redisDistribute";
-        Boolean isGetLock = redisUtils.setNX(key, 30, TimeUnit.MINUTES);
-        if (!isGetLock) {
+        boolean getlock = lockUtil.tryLock(key, TimeUnit.MILLISECONDS, 0L, 10);
+        //执行逻辑  假设执行时间为5秒
+        if (!getlock) {
             System.out.println("其他实例正在运行————————" + Thread.currentThread().getName());
             return;
         }
-        //执行逻辑  假设执行时间为5秒
         try {
             System.out.println("执行业务逻辑代码——————————" + Thread.currentThread().getName());
-            Thread.sleep(5000);
+            Thread.sleep(1000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        System.out.println(redisUtils.releaseLock(key));
     }
 }
